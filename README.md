@@ -30,8 +30,11 @@ Dependencies
 TODO List
 =========
 
-* Make it possible to pass the new value for a resource (in a format of your choice, probably JSON) to the consistency server so that it directly sends it to the client along with the invalidate notice. This way the client doesn't even have to make a server call to get the refreshed data, everything can be passed through a websocket.
+* Upload package to PyPi, create a script to run it with the pyconsistency-server command.
+* Setup & Getting started doc.
+* Documentation about the protocol (to make it easy for developers to write their own client & framework plugins).
 * Performance benchmarking : determine if Python garbage collection can cause performance issue. If so, maybe we can handle memory management ourselves even though Python is not the best suited language for it. (Then maybe rewriting consistency server in C++ could do the job).
 * Make it possible, a least for the backend <-> consistency binding, to use SSL or any secure communication method. As long as both are on a single machine and provided that this one is the same it's ok like it is now but if you whish to run consistency on a separate machine, this will become essential. 
-* Check if it already works on the client side, if not implementing it would be a plus.
+* Check if it already works on the client side (HTTPS I mean), if not implementing it would be a plus.
 * Get rid of autobahn. It sucks ! (it forces use to use a global variable because it deals badly with the pythonic server factories, it makes us import a big library while we only need to do very basic stuff with websockets and async, python coding standards aren't respected...)
+* Make it possible to pass the new value for a resource (in a format of your choice, probably JSON) to the consistency server so that it directly sends it to the client along with the invalidate notice. This way the client doesn't even have to make a server call to get the refreshed data, everything can be passed through a websocket. --> DONE : but we could also think about keeping that data in memory or at least making it possible to do so with a specific command-line argument. The drawback is that it can increase memory consumption by a lot

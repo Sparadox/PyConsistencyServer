@@ -43,14 +43,14 @@ class Resource:
         self._last_update_date = time.time()
         self._consistency_server = consistency_server
 
-    def update(self):
+    def update(self, content=None):
         """
         Called when the resource identified by the current instance is modified in the backend.
         It notifies all the clients watching it that it changed (and therefore, make them refresh).
         """
         self._last_update_date = time.time()
         for client in self._clients:
-            client.protocol.invalidate(self)
+            client.protocol.invalidate(self, content)
 
     def add_client(self, client):
         """
@@ -119,12 +119,13 @@ class BackendProtocol(asyncio.Protocol):
         """
         Handles messages sent by the backend to consistency when a resource has been modified.
         These messages respect the following pattern :
-        {"message": "update", "data":{"uri": "my_uri"}}
+        {"message": "update", "data":{"uri": "my_uri", "data": "my_Data"}}
         """
         data = json.loads(msg.decode('utf8'))
         if data["message"] == "update":
             uri = data["data"]["uri"]
-            self._consistency_server.update(uri)
+            content = data["data"]["content"] if "content" in data["data"] else None
+            self._consistency_server.update(uri, content)
 
 
 class ClientProtocol(WebSocketServerProtocol):
@@ -135,12 +136,15 @@ class ClientProtocol(WebSocketServerProtocol):
     def __init__(self):
         self._client_representation = None
 
-    def invalidate(self, resource):
+    def invalidate(self, resource, content=None):
         """
         Notifies the client the the resource identified by resource.uri on the client side is not
         consistent with the server anymore and has therefore to be refreshed.
         """
         data = {"message": "invalidate", "data":{"uri": resource.uri}}
+
+        if content is not None:
+            data["data"]["content"] = content
 
         msg = json.dumps(data).encode('utf8')
 
@@ -166,6 +170,16 @@ class ClientProtocol(WebSocketServerProtocol):
             if data["message"] == "watch":
                 uri = data["data"]["uri"]
                 CONSISTENCY_SERVER.watch(self._client_representation, uri)
+                response_data = {"message": "watched", "data":{"uri": uri}}
+                response = json.dumps(response_data).encode('utf8')
+                self.sendMessage(response)
+            elif data["message"] == "unwatch":
+                uri = data["data"]["uri"]
+                CONSISTENCY_SERVER.unwatch(self._client_representation, uri)
+                response_data = {"message": "unwatched", "data":{"uri": uri}}
+                response = json.dumps(response_data).encode('utf8')
+                self.sendMessage(response)
+
 
     def onClose(self, wasClean, code, reason):
         """
@@ -210,10 +224,10 @@ class ConsistencyServer:
         """ Terminates the server """
         self._event_loop.close()
 
-    def update(self, uri):
+    def update(self, uri, content=None):
         """ Updates the resource matching the passed URI """
         if uri in self._resources:
-            self._resources[uri].update()
+            self._resources[uri].update(content)
 
     def watch(self, client, uri):
         """ Creates the Observer/Observed relation between client and the resource represented by
@@ -222,6 +236,13 @@ class ConsistencyServer:
             self._resources[uri] = Resource(uri, self)
 
         self._resources[uri].add_client(client)
+
+    def unwatch(self, client, uri):
+        """ Breaks the Observer/Observed relation between client and the resource represented by
+        uri. """
+        if uri in self._resources:
+            self._resources[uri].remove_client(client)
+
 
     def remove_resource(self, resource):
         """
@@ -242,7 +263,7 @@ framework, please let me know (etienne.lafarge@gmail.com) so that I can advertis
 Consistency\'s website and documentation.', epilog='In case you\'re wondering, you can exit the \
 program with CTRL-C or sending it a SIGINT signal.')
 
-    PARSER.add_argument('-h', '--public-hostname', type=str, help='The hostname for the clients \
+    PARSER.add_argument('-a', '--public-hostname', type=str, help='The hostname for the clients \
 access. The default localhost should work anyway.', default="localhost")
     PARSER.add_argument('-p', '--public-port', type=int, help='The port number for the clients \
 access. Default is 4691.', default=4691)
@@ -270,4 +291,5 @@ access. Default is 1991.', default=1991)
 
     signal.signal(signal.SIGINT, _on_close_request)
 
+    print("Starting Consistency Server now...")
     CONSISTENCY_SERVER.run_forvever()
